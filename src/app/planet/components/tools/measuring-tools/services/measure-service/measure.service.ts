@@ -1,0 +1,563 @@
+import { reportError } from '@global/lib/report-error.lib';
+import { computed, effect, Injectable, signal, untracked, WritableSignal } from '@angular/core';
+import * as Cesium from 'cesium';
+
+import { ViewerService } from '@/common/services/viewer-service/viewer.service';
+import { ToolsService } from '@/components/tools/services/tools-service/tools.service';
+import type {
+  ToolOptions,
+  EntitiesGroup,
+} from '@/components/tools/services/tools-service/tools.service';
+
+// ------------------------------------------------------------- Блок замечаний --------------------------------------------------- //
+
+// Все методы изначально взяты из общей реализации инструментов (безотносительно принадлежности).
+// После инкапсуляции в measuring tools некоторые стандартные методы содержат избыточную логику.
+// TODO: будет нужен рефакторинг таких методов после окончательного утверждения бизнес-требований к данному типу инструментов.
+
+// ----------------------------------------------------------- Блок для типизации ------------------------------------------------- //
+
+export interface MeasureOptions extends ToolOptions {
+  toolName?: MeasuringToolName; // global important!
+}
+
+// Пополнять при добавлении новых инструментов (ТОЛЬКО ДЛЯ ИНСТРУМЕНТОВ, ДОБАВЛЯЮЩИХ СУЩНОСТИ В МЕСТНЫЕ СТОРЫ)
+export const measuringToolsNames = Object.freeze([
+  'calculateLine',
+  'calculateRectangle',
+  'calculateCircle',
+  'calculatePolygon',
+] as const);
+export type MeasuringToolName = (typeof measuringToolsNames)[number];
+
+export function isMeasuringToolName(name: string): name is MeasuringToolName {
+  return measuringToolsNames.some((toolName) => toolName === name);
+}
+
+export function getRusMeasuringToolName(toolName: MeasuringToolName) {
+  switch (toolName) {
+    case 'calculateLine':
+      return 'Дистанция';
+    case 'calculateRectangle':
+      return 'Прямоугольная площадь';
+    case 'calculateCircle':
+      return 'Площадь окружности';
+    case 'calculatePolygon':
+      return 'Площадь многоугольника';
+  }
+}
+// ---------------------------------------------------------- Блок базовых установок ---------------------------------------------- //
+// Запровайден в planet.ts
+@Injectable()
+export class MeasureService {
+  constructor(
+    private $viewerService: ViewerService,
+    private $toolsService: ToolsService,
+  ) {
+    // Автоматическое переключение прилипания компонентов сущностей к рельефу в зависимости от this.$viewerService.viewer.scene.mode
+    effect(() => {
+      try {
+        let onFlag: boolean = true;
+        if (
+          this.$viewerService.nowSceneModeDescription() === '2D' ||
+          this.$viewerService.nowSceneModeDescription() === 'Columbus'
+        )
+          onFlag = false;
+        else onFlag = true;
+        untracked(() => {
+          if (this._temporalEntitiesList()?.length) {
+            this.$toolsService.switchClampingToGroundForTemporalEntities(
+              this._temporalEntitiesList,
+              onFlag,
+              [],
+            );
+          }
+          if (this._linearMesurmentsLinesList()?.length)
+            this.$toolsService.switchClampingToGroundForOneStoreEntities(
+              this._linearMesurmentsLinesList,
+              onFlag,
+            );
+          if (this._rectangleAreaMesurmentsList()?.length)
+            this.$toolsService.switchClampingToGroundForOneStoreEntities(
+              this._rectangleAreaMesurmentsList,
+              onFlag,
+            );
+          if (this._calculateCircleList()?.length)
+            this.$toolsService.switchClampingToGroundForOneStoreEntities(
+              this._calculateCircleList,
+              onFlag,
+            );
+          if (this._calculatePolygonList()?.length)
+            this.$toolsService.switchClampingToGroundForOneStoreEntities(
+              this._calculatePolygonList,
+              onFlag,
+            );
+        });
+      } catch (error: unknown) {
+        reportError(error);
+      }
+    });
+  }
+
+  public cancelMeasuringTool(): void {
+    this.removeTemporalEntities();
+    this.$toolsService.clearCommonHandler();
+  }
+  // -------------------------------------------------- Блок размещения сторов инструментов --------------------------------------- //
+
+  // Реактивные массивы сущностей, созданных инструментами работы с картой. Также используются в плавающих окнах таких инструментов.
+  // Используются для управления компонентами инструментов работы с картой и их плавающими окнами
+  private _linearMesurmentsLinesList = signal<Array<EntitiesGroup | undefined>>([]);
+  get linearMeasurementsLinesList() {
+    return this._linearMesurmentsLinesList;
+  }
+  public readonly isLines = computed<boolean>(() => !!this._linearMesurmentsLinesList().length);
+
+  private _rectangleAreaMesurmentsList = signal<Array<EntitiesGroup | undefined>>([]);
+  get rectangleAreaMeasurementsList() {
+    return this._rectangleAreaMesurmentsList;
+  }
+  public readonly isRectangles = computed<boolean>(
+    () => !!this._rectangleAreaMesurmentsList().length,
+  );
+
+  private _calculateCircleList = signal<Array<EntitiesGroup | undefined>>([]);
+  get calculateCircleList() {
+    return this._calculateCircleList;
+  }
+  public readonly isCircles = computed<boolean>(() => !!this._calculateCircleList().length);
+
+  private _calculatePolygonList = signal<Array<EntitiesGroup | undefined>>([]);
+  get calculatePolygonList() {
+    return this._calculatePolygonList;
+  }
+  public readonly isPolygons = computed<boolean>(
+    () => !!this._calculatePolygonList().length,
+  );
+
+  private _allEntitiesListsLinks: {
+    [P in MeasuringToolName]: WritableSignal<Array<EntitiesGroup | undefined>>;
+  } = {
+    // prettier-ignore
+    'calculateLine': this._linearMesurmentsLinesList,
+    // prettier-ignore
+    'calculateRectangle': this._rectangleAreaMesurmentsList,
+    // prettier-ignore
+    'calculateCircle': this._calculateCircleList,
+    // prettier-ignore
+    'calculatePolygon': this._calculatePolygonList,
+    // ...другие сторы
+  };
+  get allEntitiesListsLinks() {
+    return this._allEntitiesListsLinks;
+  }
+
+  public _temporalEntitiesList = signal<Array<Cesium.Entity | undefined>>([]); // хранилище для инструментов в процессе построения (БЕЗ ГРУППИРОВКИ)
+  get temporalEntitiesList() {
+    return this._temporalEntitiesList;
+  }
+
+  // ---------------------------------------------- Блок управления основными сторами инструментов -------------------------------- //
+
+  // Очистка конкретных групп сущностей (результата одного сценария использования инструмента) с холста и из стора
+  public removeEntitiesByGroupId(
+    groupId: string | undefined,
+    entitiesStore: WritableSignal<Array<EntitiesGroup | undefined>>,
+    dataSourceName: string = this.$toolsService.measuringToolsLayerName,
+  ): boolean {
+    try {
+      if (!entitiesStore().length) return false;
+      if (groupId === undefined) {
+        console.info('Entities group to delete is not defined (by removeEntitiesByGroupId fn)');
+        return false;
+      }
+      // Массив id для последующего удаления из dataSource
+      const idsArr: string[] = [];
+      const entitiesGroupIndex = entitiesStore().findIndex((groupObj) =>
+        groupObj?.groupId.startsWith(groupId),
+      );
+      const entitiesGroup = entitiesStore()[entitiesGroupIndex];
+      if (entitiesGroupIndex !== -1 && entitiesGroup?.entitiesList) {
+        for (const entity of entitiesGroup.entitiesList) {
+          if (entity) idsArr.push(entity.id);
+        }
+        entitiesStore.update((arr) => {
+          arr.splice(entitiesGroupIndex, 1);
+          return [...arr];
+        });
+      } else {
+        console.info(
+          "Entities group to delete haven't found in entitiesStore (by removeEntitiesByGroupId fn)",
+        );
+        return false;
+      }
+      const dataSource: Cesium.DataSource | undefined =
+        this?.$viewerService.viewer.dataSources?.getByName(`${dataSourceName}`)?.[0];
+      if (dataSource) {
+        for (const id of idsArr) {
+          dataSource.entities.removeById(id);
+        }
+      } else {
+        console.info('dataSource is undefined (by removeEntitiesByGroupId fn)');
+        return false;
+      }
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  // Очистка одной сущности с холста и из стора (аналогично removeEntitiesByGroupId, но без двух переборов)
+  public removeOneEntityByGroupId(
+    entityId: string,
+    entitiesStore: WritableSignal<Array<EntitiesGroup | undefined>>,
+    dataSourceName: string = this.$toolsService.measuringToolsLayerName,
+  ): boolean {
+    try {
+      if (!entitiesStore().length) return false;
+      const entitiesGroupIndex = entitiesStore().findIndex((groupObj) =>
+        groupObj?.groupId.startsWith(entityId),
+      );
+      if (entitiesGroupIndex !== -1 && entitiesStore()[entitiesGroupIndex]?.entitiesList) {
+        entitiesStore.update((arr) => {
+          arr.splice(entitiesGroupIndex, 1);
+          return [...arr];
+        });
+      } else {
+        console.info("Entity Id hasn't found in entitiesStore (by removeOneEntityByGroupId fn)");
+        return false;
+      }
+      const dataSource: Cesium.DataSource | undefined =
+        this?.$viewerService.viewer.dataSources?.getByName(`${dataSourceName}`)?.[0];
+      if (dataSource) {
+        return dataSource.entities.removeById(entityId);
+      } else {
+        console.info('dataSource is undefined (by removeOneEntityByGroupId fn)');
+        return false;
+      }
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  //------------------------------------------------------------ //
+
+  // Очистка всех групп сущностей определенного инструмента (например, по СКМ на кнопках) с холста и из стора
+  public allToolEntitiesCleaning(
+    toolName: MeasuringToolName,
+    dataSourceName: string = this.$toolsService.measuringToolsLayerName,
+  ): boolean {
+    try {
+      if (!toolName) throw new Error('toolName is undefined in allToolEntitiesCleaning fn');
+      if (!isMeasuringToolName(toolName)) return true;
+      if (!this._allEntitiesListsLinks[toolName])
+        throw new Error('targetStore is undefined in allToolEntitiesCleaning fn');
+      const targetStore: WritableSignal<Array<EntitiesGroup | undefined>> =
+        this._allEntitiesListsLinks[toolName];
+      if (!targetStore().length) {
+        console.info('targetStore is already empty (by allToolEntitiesCleaning fn)');
+        return false;
+      }
+      const idsArr: string[] = [];
+      for (const item of targetStore()) {
+        if (item?.entitiesList.length) {
+          for (const entity of item.entitiesList) {
+            if (entity) idsArr.push(entity.id);
+          }
+        }
+      }
+      if (idsArr.length) {
+        targetStore.update(() => []);
+      } else {
+        console.info('Nothing to erase in targetStore (by allToolEntitiesCleaning fn)');
+        return false;
+      }
+      const dataSource: Cesium.DataSource | undefined =
+        this?.$viewerService.viewer.dataSources?.getByName(`${dataSourceName}`)?.[0];
+      if (dataSource) {
+        for (const id of idsArr) {
+          dataSource.entities.removeById(id);
+        }
+      } else {
+        console.info('dataSource is undefined (by allToolEntitiesCleaning fn)');
+        return false;
+      }
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  //------------------------------------------------------------ //
+
+  // Массовая очистка холста (от всех сущностей в конкретном dataSource)
+  public clearMeasuresDataSource(): boolean {
+    try {
+      const dataSource: Cesium.DataSource | undefined =
+        this?.$viewerService.viewer.dataSources?.getByName(
+          this.$toolsService.measuringToolsLayerName,
+        )?.[0];
+      if (dataSource) {
+        dataSource.entities.removeAll();
+      } else {
+        console.info('dataSource is undefined (by clearMeasuresDataSource fn)');
+        return false;
+      }
+      const listsArr: Array<WritableSignal<Array<EntitiesGroup | undefined>>> = Object.values(
+        this._allEntitiesListsLinks,
+      );
+      listsArr.forEach((item) => {
+        item.update(() => []);
+      });
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  //------------------------------------------------------------ //
+
+  public changeDefaultEntityInGroup(
+    groupIdChunk: string,
+    defaultEntity: Cesium.Entity | undefined,
+    toolName: MeasuringToolName,
+  ): boolean {
+    try {
+      const targetList: WritableSignal<Array<EntitiesGroup | undefined>> =
+        this._allEntitiesListsLinks[toolName];
+      const index = targetList().findIndex((item) => item?.groupId === groupIdChunk);
+      if (index !== -1) {
+        targetList.update((arr) => {
+          const group = arr[index];
+          if (group) group.defaultEntity = defaultEntity || undefined;
+          return [...arr];
+        });
+      } else {
+        console.info("groupId hasn't found in changeDefaultEntityInGroup fn");
+        return false;
+      }
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  // ------------------------------------------------- Блок управления временным хранилищем --------------------------------------- //
+
+  public pushGroupFromTemporal(
+    groupIdChunk: string,
+    toolName: MeasuringToolName | undefined,
+    defaultEntity?: Cesium.Entity,
+  ): boolean {
+    try {
+      if (toolName === undefined) {
+        console.info('toolName is undefined in pushGroupFromTemporal fn');
+        return false;
+      }
+      const targetList: WritableSignal<Array<EntitiesGroup | undefined>> =
+        this._allEntitiesListsLinks[toolName];
+      const index = targetList().findIndex((item) => item?.groupId === groupIdChunk);
+      if (index === -1) {
+        targetList.update((arr) => {
+          arr.push({
+            groupId: groupIdChunk,
+            entitiesList: this._temporalEntitiesList(),
+            defaultEntity: defaultEntity || undefined,
+          });
+          return [...arr];
+        });
+      } else {
+        targetList.update((arr) => {
+          arr[index]?.entitiesList.push(...this._temporalEntitiesList());
+          return [...arr];
+        });
+      }
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  public pushGroupWithoutTemporal(
+    entities: Array<Cesium.Entity | undefined>,
+    groupIdChunk: string,
+    toolName: MeasuringToolName | undefined,
+    defaultEntity?: Cesium.Entity,
+  ): boolean {
+    try {
+      if (toolName === undefined) {
+        console.info('toolName is undefined in pushGroupWithoutTemporal fn');
+        return false;
+      }
+      if (!entities.length) throw new Error('No entities in pushGroupWithoutTemporal fn');
+      const targetList: WritableSignal<Array<EntitiesGroup | undefined>> =
+        this._allEntitiesListsLinks[toolName];
+      const index = targetList().findIndex((item) => item?.groupId === groupIdChunk);
+      if (index === -1) {
+        targetList.update((arr) => {
+          arr.push({
+            groupId: groupIdChunk,
+            entitiesList: entities,
+            defaultEntity: defaultEntity || undefined,
+          });
+          return [...arr];
+        });
+      } else {
+        targetList.update((arr) => {
+          arr[index]?.entitiesList.push(...entities);
+          return [...arr];
+        });
+      }
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  public pushGroupWithoutTemporalWithDrawing(
+    entities: Array<Cesium.Entity | undefined>,
+    groupIdChunk: string,
+    toolName: MeasuringToolName | undefined,
+    defaultEntity?: Cesium.Entity,
+  ): boolean {
+    try {
+      if (toolName === undefined) {
+        console.info('toolName is undefined in pushGroupWithoutTemporalWithDrawing fn');
+        return false;
+      }
+      if (!entities.length) throw new Error('No entities in pushGroupWithoutTemporal fn');
+      if (this.pushGroupWithoutTemporal(entities, groupIdChunk, toolName, defaultEntity) === true) {
+        for (const entity of entities) {
+          if (entity) this.addNewEntityToMeasureLayer(entity);
+        }
+        return true;
+      } else return false;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  //------------------------------------------------------------ //
+
+  // Очистка временного стора без очистки холста от его сущностей
+  public clearTemporalEntitiesList(groupIdChunk?: string): boolean {
+    try {
+      if (this._temporalEntitiesList().length) {
+        if (groupIdChunk) {
+          this._temporalEntitiesList.update((arr) => {
+            arr = arr.filter((item) => !item?.id.startsWith(groupIdChunk));
+            return [...arr];
+          });
+        } else {
+          this._temporalEntitiesList.set([]);
+        }
+      } else {
+        console.info('_temporalEntitiesList() is empty in clearTemporalEntitiesList fn');
+      }
+      return true;
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  // Метод, отменяющий результаты выполнения неоконченного сценария работы инструмента (например, по Esc)
+  public removeTemporalEntities(
+    groupId?: string,
+    dataSourceName: string = this.$toolsService.measuringToolsLayerName,
+  ): boolean {
+    try {
+      if (!this._temporalEntitiesList().length) return false;
+      const idsArr: string[] = [];
+      if (groupId) {
+        for (const entity of this._temporalEntitiesList()) {
+          if (entity?.id.startsWith(groupId)) idsArr.push(entity.id);
+        }
+      } else {
+        for (const entity of this._temporalEntitiesList()) {
+          if (entity) idsArr.push(entity.id);
+        }
+      }
+      const hasDeletedFromStore = this.clearTemporalEntitiesList(groupId);
+      if (hasDeletedFromStore) {
+        const dataSource: Cesium.DataSource | undefined =
+          this?.$viewerService.viewer.dataSources?.getByName(`${dataSourceName}`)?.[0];
+        if (dataSource) {
+          for (const id of idsArr) {
+            dataSource.entities.removeById(id);
+          }
+          return true;
+        } else {
+          console.info('dataSource is undefined (by removeTemporalEntities fn)');
+          return false;
+        }
+      } else {
+        console.info('Temporal store clearing has failed (by removeTemporalEntities fn)');
+        return false;
+      }
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  }
+
+  // -------------------------------------------------- Блок добавления сущности на холст ----------------------------------------- //
+
+  public addNewEntityToMeasureLayer(entity: Cesium.Entity): boolean {
+    if (!entity || !(entity instanceof Cesium.Entity)) {
+        console.info('Invalid entity in addNewEntityToMeasureLayer fn');
+        return false;
+      }
+      const dataSource: Cesium.DataSource | undefined =
+        this?.$viewerService.viewer.dataSources?.getByName(
+          this.$toolsService.measuringToolsLayerName,
+        )?.[0];
+      if (dataSource) {
+        dataSource.entities.add(entity);
+        return true;
+      } else {
+        console.info("Data source hasn't found in addNewEntityToMeasureLayer fn");
+        return false;
+      }
+  }
+
+  // ------------------------------------------------ Блок изменений параметров сущностей ----------------------------------------- //
+
+  // Замена лисенеров (Cesium.CallbackProperty) на константы (для экономии производительности)
+  // В настоящий момент не используется за ненадобностью, т.к. сценарии использования измерительных инструментов не плодят сущности на карте (в отличие от инструментов рисования)
+  // private setEntityConstantsTimeouts: { [entityId: string]: number } = {};
+  // public setEntityConstants(validId: string | undefined): void {
+  //   try {
+  //     const entityId = validId; // контрольная копия
+  //     if (!entityId || typeof entityId !== 'string') {
+  //       throw new Error("Invalid entity's ID in setEntityConstants fn");
+  //     }
+  //     if (this.setEntityConstantsTimeouts?.[entityId]) {
+  //       clearTimeout(this.setEntityConstantsTimeouts[entityId]);
+  //     }
+  //     const toolName = entityId.split('-')[1];
+  //     if (toolName && isMeasuringToolName(toolName)) {
+  //       this.setEntityConstantsTimeouts[entityId] = setTimeout(
+  //         (id: string) => {
+  //           this.$toolsService.setConstantsForStoreEntities(
+  //             this.allEntitiesListsLinks[toolName],
+  //             id,
+  //           );
+  //         },
+  //         this.$toolsService.setEntityConstantsTimer,
+  //         entityId, // закрепление контекста
+  //       );
+  //     } else throw new Error("Invalid entity's tool's name in setEntityConstants fn");
+  //   } catch (error: unknown) {
+  //     throw error;
+  //   }
+  // }
+}

@@ -1,0 +1,9 @@
+<router-outlet />
+
+<routing-spinner />
+<routing-errors-alert />
+@defer (on idle) {
+  @if ($setProgressSpinnerService.isShowSpinner()) {
+    <progress-spinner />
+  }
+}

@@ -1,0 +1,58 @@
+@use '@angular/material' as mat;
+@use '../configs/angular-material.config.scss' as config;
+
+// @use 'material-design-icons/iconfont/material-icons.css'; // не успевает преобразовать текст в иконки (при первой загрузке новой сборки)
+// Содержимое файла перенесено в хэдер index.html (используются абсолютные пути).
+// Там же файлы шрифтов предзагружаются из ассетов (были скопированы из библиотеки "material-design-icons v.3.0.1").
+
+/* ---------------------------- default preset (start) ---------------------------- */
+html {
+  @include mat.theme(
+    (
+      // Палитры устанавливаются посредством angular-material.config.scss
+      // color: (
+      //   primary: mat.$azure-palette,
+      //   tertiary: mat.$blue-palette,
+      // ),
+      typography: Roboto,
+      density: 0
+    )
+  );
+}
+
+body {
+  // Установлено в :root в common-global.scss
+  // color-scheme: light dark;
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  overflow: hidden;
+}
+
+html,
+body {
+  height: 100%;
+}
+// (?) Также устанолено по умолчанию: (?)
+// body {
+//   // margin: 0;
+//   font-family: Roboto, 'Helvetica Neue', sans-serif;
+// }
+/* ---------------------------- default preset (end) ------------------------------ */
+
+// Предустановка селекторов тем приложения для planet.ts и theme-color-palette.ts
+@each $name-chunk-primary, $name-chunk-tertiary, $primary-palette,
+  $tertiary-palette in config.$theme-palettes-list
+{
+  .#{$name-chunk-primary}-#{$name-chunk-tertiary}-theme {
+    @include mat.theme(
+      (
+        color: (
+          primary: $primary-palette,
+          tertiary: $tertiary-palette,
+        ),
+      )
+    );
+  }
+}

@@ -1,0 +1,40 @@
+@charset 'utf-8';
+
+// Путь до дирректории импорта общих scss-файлов находится в angular.json в опции:
+// projects.[имя проекта].architect.build.options.stylePreprocessorOptions.includePaths[]
+@use './fonts-core';
+@use './variables-core';
+@use './extends-core';
+@use './mixins-core';
+@use './functions-core';
+@use './animations-core';
+@use 'media-breakpoints-global';
+
+:root {
+  --main-tabs-content-width: 300px;
+  // Нижняя полоса desktop (>1080): середина высоты = зазор coords↔tools.
+  --coords-panel-left: 15px;
+  --coords-panel-width: 130px;
+  --tools-panel-left: 510px;
+}
+
+// Стек телефона: высота и coords — разные компоненты, общий якорь только здесь.
+@include media-breakpoints-global.mobile {
+  .camera-height-container,
+  .coords-container-main {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    right: auto !important;
+  }
+
+  // Height is `@defer (on idle)`; coords can paint first. Chevron only after the bar exists.
+  :root.phone-stack-ready .camera-height-container,
+  #gip-oko-demoUiContainer.phone-stack-ready .camera-height-container {
+    visibility: visible;
+  }
+
+  :root.phone-stack-ready:has(.camera-height-container) .coords-container-main,
+  #gip-oko-demoUiContainer.phone-stack-ready:has(.camera-height-container) .coords-container-main {
+    visibility: visible;
+  }
+}

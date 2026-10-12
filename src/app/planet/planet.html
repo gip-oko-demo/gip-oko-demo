@@ -1,0 +1,170 @@
+<div #mainGipOkoDemoContainer id="mainGipOkoDemoContainer">
+  <div
+    id="cesiumContainer"
+    runViewerDirective
+    [style.cursor]="
+      !$checkMobileDeviceService.isMobile &&
+      $cursorCoordsService.latitudeDescription() &&
+      ($toolsService.commonHandler() !== undefined || $toolsService.drawingsBlocker() === true)
+        ? $any($toolsService.commonHandler())?._initializer === 'flyAround'
+          ? emptyCursorStyle
+          : 'crosshair'
+        : 'auto'
+    "
+  >
+    @if ($checkMobileDeviceService.isMobile) {
+      <div id="crosshairForMobiles">+</div>
+    }
+  </div>
+  <div id="gip-oko-demoUiContainer">
+    <mat-sidenav-container
+      class="gip-oko-demo-main-sidenav-global"
+      [hasBackdrop]="
+        ($checkMobileDeviceService.isMobile && !$checkMobileDeviceService.wideMobile()) ||
+        $checkMobileDeviceService.tabletLayout()
+          ? 'true'
+          : 'false'
+      "
+    >
+      <mat-sidenav
+        class="gip-oko-demo-main-sidenav"
+        #sidenavRef
+        [mode]="
+          ($checkMobileDeviceService.isMobile && !$checkMobileDeviceService.wideMobile()) ||
+          $checkMobileDeviceService.tabletLayout()
+            ? 'over'
+            : 'side'
+        "
+        position="start"
+        [opened]="
+          (!$checkMobileDeviceService.isMobile && !$checkMobileDeviceService.tabletLayout()) ||
+          $checkMobileDeviceService.wideMobile()
+        "
+        (openedChange)="sidenavOpened.set($event)"
+        [disableClose]="
+          (!$checkMobileDeviceService.isMobile && !$checkMobileDeviceService.tabletLayout()) ||
+          $checkMobileDeviceService.wideMobile()
+            ? 'true'
+            : 'false'
+        "
+      >
+        <div class="gip-oko-demo-main-sidenav-left-content">
+          <!-- <div class="gip-oko-demo-main-sidenav-logo">
+            <div class="gip-oko-demo-main-sidenav-logo-text-container">
+              Интерактивная карта<br />"gip-oko-demo"
+            </div>
+            <div class="gip-oko-demo-main-sidenav-logo-image-container">
+              <img [style.opacity]="isDarkModeChecked() ? '1' : '0.7'" />
+            </div>
+          </div> -->
+          @defer (when $viewerService.viewerHasLoaded() === true) {
+            <div class="gip-oko-demo-main-sidenav-tabs-conteiner">
+              <mat-tab-group
+                headerPosition="above"
+                preserveContent
+                [selectedIndex]="selectedTabIndex()"
+                (selectedIndexChange)="selectedTabIndex.set($event)"
+              >
+                @for (tab of tabs(); track tab) {
+                  <mat-tab [label]="tab" labelClass="non-user-select">
+                    @if (tab === 'Рисование') {
+                      <drawings-list />
+                    } @else {
+                      {{ '...в разработке...' }}
+                    }
+                  </mat-tab>
+                }
+              </mat-tab-group>
+            </div>
+          } @placeholder {
+            <p style="text-align: center">Loading...</p>
+          } @error {
+            <p style="text-align: center">Error!</p>
+          }
+        </div>
+      </mat-sidenav>
+      <mat-sidenav-content class="gip-oko-demo-main-ui-container">
+        @if ($checkMobileDeviceService.isMobile || $checkMobileDeviceService.tabletLayout()) {
+          <!-- [aria-hidden]="
+              $checkMobileDeviceService.wideMobile() ? false : sidenavRef.opened ? false : true
+            " -->
+          <div
+            aria-hidden="false"
+            class="gip-oko-demo-main-sidenav-edge-swipe"
+            (touchstart)="onSidenavEdgeTouchStart($event)"
+            (touchmove)="onSidenavEdgeTouchMove($event, sidenavRef)"
+            (touchend)="onSidenavEdgeTouchEnd()"
+            (touchcancel)="onSidenavEdgeTouchEnd()"
+          >
+            <!-- [style.display]="
+                $checkMobileDeviceService.wideMobile()
+                  ? 'block'
+                  : !sidenavOpened()
+                    ? 'block'
+                    : 'none'
+              " -->
+            <button
+              class="gip-oko-demo-main-sidenav-toggle-button"
+              type="button"
+              matButton="tonal"
+              [matTooltip]="sidenavRef.opened ? 'Свернуть' : 'Развернуть'"
+              matTooltipShowDelay="1000"
+              (click)="sidenavRef.toggle()"
+            >
+              <mat-icon
+                [style.marginLeft]="'-4px'"
+                class="gip-oko-demo-main-sidenav-toggle-button-chevron"
+                >{{ sidenavRef.opened ? 'chevron_left' : 'chevron_right' }}</mat-icon
+              >
+            </button>
+          </div>
+        } @else {
+          <button
+            class="gip-oko-demo-main-sidenav-toggle-button"
+            type="button"
+            matButton="tonal"
+            [matTooltip]="sidenavRef.opened ? 'Свернуть' : 'Развернуть'"
+            matTooltipShowDelay="1000"
+            (click)="sidenavRef.toggle()"
+          >
+            <mat-icon
+              [style.marginLeft]="'0px'"
+              class="gip-oko-demo-main-sidenav-toggle-button-chevron"
+              >{{ sidenavRef.opened ? 'chevron_left' : 'chevron_right' }}</mat-icon
+            >
+          </button>
+        }
+        @defer (when $viewerService.viewerHasLoaded() === true) {
+          @defer (when $cursorCoordsService.underMouseEntityHasLoaded() === true) {
+            <cursor-coords-info />
+          }
+          @defer (when $toolsService.toolsServiceHasStarted() === true) {
+            <tools-panel />
+          }
+          @defer (on idle) {
+            <floating-windows-container />
+            <floating-windows-tabs-panel />
+            <znemz-navigation-mixin />
+            <camera-height-tool />
+          }
+        }
+
+        <div class="header-buttons-container">
+          <main-menu />
+          <!-- @defer (on idle) {
+            <button
+              matTooltip="Test"
+              matTooltipShowDelay="1000"
+              class="header-buttons-container-button"
+              style="left: 0px; top: 38px"
+              matButton="tonal"
+              (click)="benchmarkTest()"
+            >
+              Test
+            </button>
+          } -->
+        </div>
+      </mat-sidenav-content>
+    </mat-sidenav-container>
+  </div>
+</div>

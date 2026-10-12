@@ -21,6 +21,7 @@ import { CursorCoordsService } from '@/common/services/cursor-coords-service/cur
 import type { CRS } from '@/common/lib/coord-systems.lib';
 import { CheckMobileDeviceService } from '@global/services/check-mobile-device-service/check-mobile-device.service';
 import { finiteCssPx } from '@global/lib/common-global.lib';
+import { phoneHeightPanelNaturalWidth } from '@/common/lib/phone-stack-width.lib';
 
 @Component({
   selector: 'cursor-coords-info',
@@ -145,12 +146,7 @@ export class CursorCoordsInfo {
   private heightPanelNaturalWidth(): number {
     const box = document.querySelector('.camera-height-container');
     if (!(box instanceof HTMLElement)) return 0;
-    const cs = getComputedStyle(box);
-    const padX = finiteCssPx(cs.paddingLeft) + finiteCssPx(cs.paddingRight);
-    const childrenW = [...box.children]
-      .filter((el) => getComputedStyle(el).display !== 'none')
-      .reduce((sum, el) => sum + el.getBoundingClientRect().width, 0);
-    return childrenW + padX;
+    return phoneHeightPanelNaturalWidth(box);
   }
 
   private syncPhoneCoordsMinWidth(): void {
@@ -185,9 +181,15 @@ export class CursorCoordsInfo {
     );
     const coordsW = Math.max(needed, currentCoords);
     const stackW = Math.ceil(Math.max(this.heightPanelNaturalWidth(), coordsW));
+    const coordsPx = `${coordsW}px`;
+    const stackPx = `${stackW}px`;
     for (const node of targets) {
-      node.style.setProperty('--phone-coords-content-width', `${coordsW}px`);
-      node.style.setProperty('--phone-height-stack-width', `${stackW}px`);
+      if (node.style.getPropertyValue('--phone-coords-content-width') !== coordsPx) {
+        node.style.setProperty('--phone-coords-content-width', coordsPx);
+      }
+      if (node.style.getPropertyValue('--phone-height-stack-width') !== stackPx) {
+        node.style.setProperty('--phone-height-stack-width', stackPx);
+      }
       node.classList.add('phone-stack-ready');
     }
   }

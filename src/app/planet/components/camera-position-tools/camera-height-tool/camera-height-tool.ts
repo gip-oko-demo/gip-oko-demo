@@ -12,6 +12,7 @@ import { reportError } from '@global/lib/report-error.lib';
 import { ViewerService } from '@/common/services/viewer-service/viewer.service';
 import { CheckMobileDeviceService } from '@global/services/check-mobile-device-service/check-mobile-device.service';
 import { finiteCssPx } from '@global/lib/common-global.lib';
+import { phoneHeightPanelNaturalWidth } from '@/common/lib/phone-stack-width.lib';
 
 @Component({
   selector: 'camera-height-tool',
@@ -128,14 +129,10 @@ export class CameraHeightTool implements OnDestroy {
           finiteCssPx(root.style.getPropertyValue('--phone-coords-content-width')) ||
           finiteCssPx(html.style.getPropertyValue('--phone-coords-content-width'));
         if (!coordsMin) return;
-        const cs = getComputedStyle(box);
-        const padX = finiteCssPx(cs.paddingLeft) + finiteCssPx(cs.paddingRight);
-        const childrenW = [...box.children]
-          .filter((el) => getComputedStyle(el).display !== 'none')
-          .reduce((sum, el) => sum + el.getBoundingClientRect().width, 0);
-        const stackW = Math.ceil(Math.max(childrenW + padX, coordsMin));
+        const stackW = Math.ceil(Math.max(phoneHeightPanelNaturalWidth(box), coordsMin));
         if (!stackW) return;
         const px = `${stackW}px`;
+        if (root.style.getPropertyValue('--phone-height-stack-width') === px) return;
         root.style.setProperty('--phone-height-stack-width', px);
         html.style.setProperty('--phone-height-stack-width', px);
       };

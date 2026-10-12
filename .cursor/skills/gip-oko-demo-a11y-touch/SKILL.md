@@ -32,7 +32,7 @@ description: Use when changing keyboard access, aria attributes, focus, tooltips
 Не плодить wrapper вокруг высоты и координат. Ширина — CSS-переменные на `#gip-oko-demoUiContainer` / `:root`: `--phone-height-stack-width`, `--phone-coords-content-width`.
 
 - Мерить карточку coords как `max-content` (и SVG курсора), не `scrollWidth` растянутой колонки `1fr`. На время замера снять `max-width: 100%`.
-- Стек = `max(натуральная высота, coordsMin)`, **без** ratchet от текущей ширины стека. Observer только при `phoneLayout`; не писать стек, пока нет `coordsMin`.
+- Стек = `max(натуральная высота, coordsMin)`, **без** ratchet от текущей ширины стека. Натуральная высота — `phoneHeightPanelNaturalWidth`: на замер `flex-grow/shrink: 0` у детей (инпут `flex-grow: 1` иначе раздует childrenW), ширину бокса не трогать (ResizeObserver loop). Observer только при `phoneLayout`; не писать стек, пока нет `coordsMin`.
 - `--phone-coords-content-width` только растёт. Смена СК не сужает стек.
 - Тело coords в DOM при свёртке (`visibility` / `inert`). Показ после `phone-stack-ready`. Шеврон coords — `:has(.camera-height-container)`: высота `@defer (on idle)`.
 - Подпись высоты на телефоне **«Обзор с:»**, не десктопная «Высота наблюдения» (раздует стек).

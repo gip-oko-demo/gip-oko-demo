@@ -21,8 +21,8 @@
     }
 
     @include media-breakpoints-global.mobile {
-      // Center in the strip left of the compass, not in the full --right-part-min-width.
-      left: calc((var(--right-part-min-width) - var(--compass-widget-width)) / 2);
+      // Center in the strip left of the compass (same containing block as tablet 50%).
+      left: calc((100% - var(--compass-widget-width)) / 2);
       right: auto;
       transform: translateX(-50%);
     }

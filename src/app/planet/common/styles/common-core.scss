@@ -16,6 +16,22 @@
   --coords-panel-left: 15px;
   --coords-panel-width: 130px;
   --tools-panel-left: 510px;
+  // Compass occupancy — first paint. Mixin is `@defer (on idle)`; tools-panel
+  // mobile `left` uses --compass-widget-width and must not wait for it.
+  --compass-box-size: 150px;
+  --compass-scale: 0.8;
+  --compass-right: -22px;
+  --compass-widget-width: calc(
+    var(--compass-box-size) * (1 + var(--compass-scale)) / 2 + var(--compass-right)
+  );
+}
+
+@include media-breakpoints-global.laptop {
+  :root {
+    // 0.8 × 44/32 so the ring scales with 44px zoom buttons
+    --compass-scale: 1.1;
+    --compass-right: -13px;
+  }
 }
 
 // Стек телефона: высота и coords — разные компоненты, общий якорь только здесь.

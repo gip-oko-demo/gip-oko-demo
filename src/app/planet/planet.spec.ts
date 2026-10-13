@@ -239,6 +239,40 @@ describe('Maingip-oko-demo', () => {
       return { touches, stopPropagation() {} } as unknown as TouchEvent;
     }
 
+    function dispatchBackdropTouch(
+      type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+      target: EventTarget,
+      points: Array<{ x: number; y: number }>,
+    ): void {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      const touches = points.map((point, index) => ({
+        identifier: index,
+        clientX: point.x,
+        clientY: point.y,
+        target,
+      }));
+      Object.defineProperties(event, {
+        touches: { value: type === 'touchend' || type === 'touchcancel' ? [] : touches },
+        changedTouches: { value: touches },
+      });
+      target.dispatchEvent(event);
+    }
+
+    async function openOverlaySidenav(): Promise<{
+      sidenav: MatSidenav;
+      backdrop: HTMLElement;
+    }> {
+      const sidenav = sidenavInstance();
+      await sidenav.open();
+      fixture.detectChanges();
+      const backdrop = fixture.nativeElement.querySelector(
+        '.mat-drawer-backdrop',
+      ) as HTMLElement | null;
+      expect(sidenav.opened).toBe(true);
+      expect(backdrop).toBeTruthy();
+      return { sidenav, backdrop: backdrop as HTMLElement };
+    }
+
     it('shows the edge catcher for tablet and phone layouts, not for a wide desktop', async () => {
       await setupSidenavTest(false, signal(true));
       expect(
@@ -281,6 +315,55 @@ describe('Maingip-oko-demo', () => {
       host.onSidenavEdgeTouchStart(touchEvent(4, 200, 2));
       host.onSidenavEdgeTouchMove(touchEvent(80, 200, 2), sidenav);
       expect(sidenav.opened).toBe(false);
+    });
+
+    it('closes the overlay sidenav on a one-finger swipe left on the backdrop', async () => {
+      await setupSidenavTest(false, signal(true));
+      const { sidenav, backdrop } = await openOverlaySidenav();
+      dispatchBackdropTouch('touchstart', backdrop, [{ x: 200, y: 200 }]);
+      dispatchBackdropTouch('touchmove', backdrop, [{ x: 140, y: 208 }]);
+      expect(sidenav.opened).toBe(true);
+      dispatchBackdropTouch('touchend', backdrop, [{ x: 140, y: 208 }]);
+      expect(sidenav.opened).toBe(false);
+    });
+
+    it('does not call preventDefault on a non-cancelable backdrop swipe touchend', async () => {
+      await setupSidenavTest(false, signal(true));
+      const { sidenav, backdrop } = await openOverlaySidenav();
+      dispatchBackdropTouch('touchstart', backdrop, [{ x: 200, y: 200 }]);
+      dispatchBackdropTouch('touchmove', backdrop, [{ x: 140, y: 208 }]);
+      const touchend = new Event('touchend', { bubbles: true, cancelable: false });
+      Object.defineProperties(touchend, {
+        touches: { value: [] },
+        changedTouches: { value: [{ clientX: 140, clientY: 208, target: backdrop }] },
+      });
+      const preventDefault = vi.spyOn(touchend, 'preventDefault');
+      backdrop.dispatchEvent(touchend);
+      expect(sidenav.opened).toBe(false);
+      expect(preventDefault).not.toHaveBeenCalled();
+    });
+
+    it('does not close the overlay sidenav on a vertical backdrop move or a second finger', async () => {
+      await setupSidenavTest(false, signal(true));
+      const { sidenav, backdrop } = await openOverlaySidenav();
+      dispatchBackdropTouch('touchstart', backdrop, [{ x: 200, y: 200 }]);
+      dispatchBackdropTouch('touchmove', backdrop, [{ x: 180, y: 280 }]);
+      dispatchBackdropTouch('touchend', backdrop, [{ x: 180, y: 280 }]);
+      expect(sidenav.opened).toBe(true);
+
+      dispatchBackdropTouch('touchstart', backdrop, [
+        { x: 200, y: 200 },
+        { x: 201, y: 200 },
+      ]);
+      dispatchBackdropTouch('touchmove', backdrop, [
+        { x: 140, y: 200 },
+        { x: 141, y: 200 },
+      ]);
+      dispatchBackdropTouch('touchend', backdrop, [
+        { x: 140, y: 200 },
+        { x: 141, y: 200 },
+      ]);
+      expect(sidenav.opened).toBe(true);
     });
   });
 });

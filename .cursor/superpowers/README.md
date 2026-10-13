@@ -23,6 +23,8 @@
 
 [mobile UI chrome](./specs/2026-09-21-mobile-ui-chrome-design.md) — implemented, merged into as-is (ui-theme / viewer-crs / map-tools). План [2026-09-21-mobile-ui-chrome](./plans/2026-09-21-mobile-ui-chrome.md) **executed** 2026-09-22 (не гонять заново).
 
+[overlay sidenav backdrop swipe close](./specs/2026-10-13-overlay-sidenav-backdrop-swipe-close-design.md) — implemented, merged into as-is (ui-theme / a11y-touch). Плана Superpowers нет.
+
 Новая **продуктовая** архитектурная спека — файл `specs/YYYY-MM-DD-<topic>-design.md` и строка в этом списке плюс таблица в корневой product-спеке. Не класть сюда процессные спеки (тесты, раннер).
 
 ## Process (не product)

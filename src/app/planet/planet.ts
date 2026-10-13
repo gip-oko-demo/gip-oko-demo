@@ -17,7 +17,7 @@ import * as Cesium from 'cesium';
 // -------------------------------------------------------------------- //
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSidenav, MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenav, MatSidenavContainer, MatSidenavModule } from '@angular/material/sidenav';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 // -------------------------------------------------------------------- //
@@ -155,6 +155,20 @@ export class Planet {
         reportError(error);
       }
     });
+    effect((onCleanup) => {
+      const overlayOpen =
+        this.sidenavOpened() &&
+        ((this.$checkMobileDeviceService.isMobile &&
+          !this.$checkMobileDeviceService.wideMobile()) ||
+          this.$checkMobileDeviceService.tabletLayout());
+      untracked(() => {
+        this.detachSidenavBackdropSwipe();
+        if (overlayOpen) {
+          this.attachSidenavBackdropSwipe();
+        }
+      });
+      onCleanup(() => this.detachSidenavBackdropSwipe());
+    });
 
     // Для тестов
     // document.addEventListener('click', (event) => {
@@ -165,9 +179,15 @@ export class Planet {
     // });
   }
   @ViewChild('mainGipOkoDemoContainer') public mainGipOkoDemoContainerRef!: ElementRef<Element>;
+  @ViewChild(MatSidenavContainer, { read: ElementRef })
+  private sidenavContainerRef?: ElementRef<HTMLElement>;
+  @ViewChild('sidenavRef') private sidenavRef?: MatSidenav;
 
   protected readonly sidenavOpened = signal(false);
   private sidenavEdgeSwipeStart: { x: number; y: number } | null = null;
+  private sidenavBackdropEl: HTMLElement | null = null;
+  private sidenavBackdropSwipeStart: { x: number; y: number } | null = null;
+  private sidenavBackdropSwipeClosePending = false;
 
   protected onSidenavEdgeTouchStart(event: TouchEvent): void {
     if (event) event.stopPropagation();
@@ -216,6 +236,78 @@ export class Planet {
   protected onSidenavEdgeTouchEnd(): void {
     this.sidenavEdgeSwipeStart = null;
   }
+
+  private attachSidenavBackdropSwipe(): void {
+    const backdrop = this.sidenavContainerRef?.nativeElement.querySelector<HTMLElement>(
+      '.mat-drawer-backdrop',
+    );
+    if (!backdrop) {
+      return;
+    }
+    this.sidenavBackdropEl = backdrop;
+    backdrop.addEventListener('touchstart', this.onSidenavBackdropTouchStart);
+    backdrop.addEventListener('touchmove', this.onSidenavBackdropTouchMove);
+    backdrop.addEventListener('touchend', this.onSidenavBackdropTouchEnd, { passive: false });
+    backdrop.addEventListener('touchcancel', this.onSidenavBackdropTouchCancel);
+  }
+
+  private detachSidenavBackdropSwipe(): void {
+    const backdrop = this.sidenavBackdropEl;
+    if (!backdrop) {
+      return;
+    }
+    backdrop.removeEventListener('touchstart', this.onSidenavBackdropTouchStart);
+    backdrop.removeEventListener('touchmove', this.onSidenavBackdropTouchMove);
+    backdrop.removeEventListener('touchend', this.onSidenavBackdropTouchEnd);
+    backdrop.removeEventListener('touchcancel', this.onSidenavBackdropTouchCancel);
+    this.sidenavBackdropEl = null;
+    this.sidenavBackdropSwipeStart = null;
+    this.sidenavBackdropSwipeClosePending = false;
+  }
+
+  private readonly onSidenavBackdropTouchStart = (event: Event): void => {
+    const touchEvent = event as TouchEvent;
+    this.sidenavBackdropSwipeClosePending = false;
+    if (touchEvent.touches.length !== 1) {
+      this.sidenavBackdropSwipeStart = null;
+      return;
+    }
+    const touch = touchEvent.touches[0];
+    this.sidenavBackdropSwipeStart = { x: touch.clientX, y: touch.clientY };
+  };
+
+  private readonly onSidenavBackdropTouchMove = (event: Event): void => {
+    const touchEvent = event as TouchEvent;
+    const start = this.sidenavBackdropSwipeStart;
+    if (!start || touchEvent.touches.length !== 1) {
+      return;
+    }
+    const touch = touchEvent.touches[0];
+    const dx = start.x - touch.clientX;
+    const dy = touch.clientY - start.y;
+    if (dx >= 48 && dx > Math.abs(dy)) {
+      this.sidenavBackdropSwipeClosePending = true;
+    }
+  };
+
+  private readonly onSidenavBackdropTouchEnd = (event: Event): void => {
+    if (this.sidenavBackdropSwipeClosePending) {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      this.sidenavBackdropSwipeClosePending = false;
+      this.sidenavBackdropSwipeStart = null;
+      this.sidenavOpened.set(false);
+      void this.sidenavRef?.close();
+      return;
+    }
+    this.sidenavBackdropSwipeStart = null;
+  };
+
+  private readonly onSidenavBackdropTouchCancel = (): void => {
+    this.sidenavBackdropSwipeStart = null;
+    this.sidenavBackdropSwipeClosePending = false;
+  };
 
   // "Пустой" курсор 1x1 px
   protected emptyCursorStyle: string = 'url(assets/1x1_transparent.png) 0 1, auto';

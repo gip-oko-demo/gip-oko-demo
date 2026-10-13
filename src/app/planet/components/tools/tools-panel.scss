@@ -19,6 +19,13 @@
       transform: translateX(-50%);
       bottom: calc(15px + env(safe-area-inset-bottom, 0px));
     }
+
+    @include media-breakpoints-global.mobile {
+      // Center in the strip left of the compass, not in the full --right-part-min-width.
+      left: calc((var(--right-part-min-width) - var(--compass-widget-width)) / 2);
+      right: auto;
+      transform: translateX(-50%);
+    }
     // width: 35px;
     width: max-content;
     height: max-content;

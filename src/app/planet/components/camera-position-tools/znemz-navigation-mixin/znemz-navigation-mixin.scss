@@ -79,13 +79,23 @@
 //   height: 240px;
 // }
 
+:root {
+  --compass-box-size: 150px;
+  --compass-scale: 0.8;
+  --compass-right: -22px;
+  // On-screen occupancy from the right edge (hit box after scale).
+  --compass-widget-width: calc(
+    var(--compass-box-size) * (1 + var(--compass-scale)) / 2 + var(--compass-right)
+  );
+}
+
 .compass {
-  transform: scale(0.8);
+  transform: scale(var(--compass-scale));
   position: absolute;
-  right: -22px;
+  right: var(--compass-right);
   bottom: 97px;
-  width: 150px;
-  height: 150px;
+  width: var(--compass-box-size);
+  height: var(--compass-box-size);
   pointer-events: auto;
   touch-action: none;
   -webkit-touch-callout: none;
@@ -93,19 +103,23 @@
 }
 
 @include media-breakpoints-global.laptop {
-  .compass {
+  :root {
     // 0.8 × 44/32 so the ring scales with 44px zoom buttons
-    transform: scale(1.1);
-    right: -13px;
+    --compass-scale: 1.1;
+    --compass-right: -13px;
+  }
+  .compass {
     bottom: 156px;
   }
 }
 
 @include media-breakpoints-global.tablet {
-  .compass {
+  :root {
     // 0.8 × 44/32 so the ring scales with 44px zoom buttons
-    transform: scale(1.1);
-    right: -13px;
+    --compass-scale: 1.1;
+    --compass-right: -13px;
+  }
+  .compass {
     bottom: 156px;
   }
 }

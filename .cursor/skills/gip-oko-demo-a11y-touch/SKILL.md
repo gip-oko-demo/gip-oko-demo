@@ -24,6 +24,7 @@ description: Use when changing keyboard access, aria attributes, focus, tooltips
 - Жесты карты — Cesium. Компас и кнопки зума `@znemz/cesium-navigation` монтируются и на UA mobile: `attachNavigationTouchBridge` в `znemz-navigation-mixin.ts` переводит touch в mouse/click миксина. Подписи этих элементов — `MatTooltip` (задержка 1000, слева), не атрибут `title`. Файлы пакета не менять и не снимать виджет с мобильного UA. `preventDefault` у этого моста только на жесте, который начался на `.compass` или `.navigation-controls`. Не вешать `preventDefault` на `touchmove` всего `document` без спроса (сломает скролл UI).
 - Свайп sidenav: полоска `.gip-oko-demo-main-sidenav-edge-swipe` в `planet` при `isMobile` или `tabletLayout` (кнопка-шеврон внутри неё). Вправо открывает, влево закрывает (порог 48px, сильнее по горизонтали). Не слушатель на `document`. На десктопном UA шире 767 полоски нет, кнопка отдельно.
 - Брейкпоинты только из `media-breakpoints-global.scss`: `tablet()` ≤767px, `mobile()` ≤460px, `tiny()` ≤320px.
+- Phone ≤460: `tools-panel` не `left: 50%` на всю `--right-part-min-width`. Центр в полосе слева от компаса: `(--right-part-min-width − --compass-widget-width) / 2`. Иначе при min-width 350px раскрытая левая группа под hit-box `.compass`.
 - Hit-area: с `laptop` ≤1080 `--regular-btn-size: 44px` и `--tool-chevron-thickness` ½ кнопки (выше 1080 — 32px и ⅓). `margin-left`/`margin-bottom` из толщины. Sidenav toggle — высота 6× кнопки (на `tablet` ≤767 — 4×), ширина ½ кнопки.
 - Hover-only действия дублировать кликом/тапом.
 
